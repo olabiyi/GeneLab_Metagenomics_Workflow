@@ -64,7 +64,7 @@ manifest_data = {
     "missing_optional": [],
     "failed_missing": [],
     "failed_empty": [],
-    "assembly_failed": []
+    "failed_assemblies": []
 }
 
 # Setting some colors
@@ -101,7 +101,7 @@ def report_failure(validation_log, message, color = "yellow", write_log = True, 
         with open(validation_log, "a") as log:
             log.write(f"{message}\n")
 
-def report_no_exist(validation_log, message, color = "yellow", write_log = True, optional_file = None, failure_type = "missing"):
+def report_no_exist(validation_log, message, color = "yellow", write_log = True, optional_file = None):
     """ Reports that an expected file was not found, but does not fail validation since some files may be conditionally expected """
     print("")
     wprint(color_text(message, color))
@@ -160,12 +160,8 @@ def check_for_file_and_contents(validation_log, file_path: Path):
             return
 
     if not file_path.stat().st_size > 0:
-        if is_opt:
-            report_no_exist(validation_log, f"The optional file '{file_path}' is empty.", optional_file=file_path, failure_type="empty")
-            return
-        else:
-            report_failure(validation_log, f"The file '{file_path}' is empty.", missing_file=file_path, failure_type="empty")
-            return
+        report_failure(validation_log, f"The file '{file_path}' is empty.", missing_file=file_path, failure_type="empty")
+        return
         
     if file_path not in manifest_data["verified"]:
         manifest_data["verified"].append(str(file_path))
@@ -174,7 +170,7 @@ def check_expected_directories(validation_log, expected_dirs, optional_dirs=None
     """ Checks that the expected directories exist """
     for directory in expected_dirs:
         if not os.path.isdir(directory):
-            report_failure(validation_log, f"The directory '{directory}' was expected but not found.", missing_file=directory)
+            report_failure(validation_log, f"The directory '{directory}' was expected but not found.", missing_file=directory, failure_type="missing")
     
     if optional_dirs:
         for directory in optional_dirs:
@@ -220,7 +216,7 @@ def get_multiqc_samples(zip_file, technology):
         reads_stats = data.get("report_general_stats_data", [{}])[0]
     return list(reads_stats.keys())
 
-def check_multiqc_outputs(validation_log, technology, sample_names, multiqc_zip, prefix,
+def check_multiqc_outputs(validation_log, technology, sample_names, multiqc_zip, multiqc_type_prefix,
                           R1_suffix, R2_suffix, unpaired_suffix, isSingle_ended):
     """ Verifies all samples are indexed correctly within MultiQC JSON metrics records """
     check_for_file_and_contents(validation_log, multiqc_zip)
@@ -228,35 +224,41 @@ def check_multiqc_outputs(validation_log, technology, sample_names, multiqc_zip,
     
     if technology == "illumina":
         if not isSingle_ended:
-            R1_sub = R1_suffix.split(".")[0].replace(f"_{prefix}", "")
-            R2_sub = R2_suffix.split(".")[0].replace(f"_{prefix}", "")
+            R1_sub = R1_suffix.split(".")[0].replace(f"_{multiqc_type_prefix}", "")
+            R2_sub = R2_suffix.split(".")[0].replace(f"_{multiqc_type_prefix}", "")
             for sample in sample_names:
                 if not f"{sample}{R1_sub}" in file_prefixes_in_multiqc:
-                    report_failure(validation_log, f"The {prefix} multiqc output is missing expected '{sample}{R1_sub}' entry.")
+                    report_failure(validation_log, f"The {multiqc_type_prefix} multiqc output is missing expected '{sample}{R1_sub}' entry.")
                 if not f"{sample}{R2_sub}" in file_prefixes_in_multiqc:
-                    report_failure(validation_log, f"The {prefix} multiqc output is missing expected '{sample}{R2_sub}' entry.")
+                    report_failure(validation_log, f"The {multiqc_type_prefix} multiqc output is missing expected '{sample}{R2_sub}' entry.")
         else:
-            sub = unpaired_suffix.split(".")[0].replace(f"_{prefix}", "")
+            sub = unpaired_suffix.split(".")[0].replace(f"_{multiqc_type_prefix}", "")
             for sample in sample_names:
                 if not f"{sample}{sub}" in file_prefixes_in_multiqc and not f"{sample}" in file_prefixes_in_multiqc:
-                    report_failure(validation_log, f"The {prefix} multiqc output is missing expected '{sample}{sub}' entry.")
+                    report_failure(validation_log, f"The {multiqc_type_prefix} multiqc output is missing expected '{sample}{sub}' entry.")
     else:
         for sample in sample_names:
             if not f"{sample}" in file_prefixes_in_multiqc:
-                report_failure(validation_log, f"The {prefix} multiqc output is missing expected '{sample}' entry.")
+                report_failure(validation_log, f"The {multiqc_type_prefix} multiqc output is missing expected '{sample}' entry.")
+
+def check_nanoplot_outputs(validation_log, sample_names, nanoplot_dir, nanoplot_type_prefix, output_prefix, assay_suffix):
+    """ Explicit check loop verifying every NanoPlot sample report.html is non-empty and accessible """
+    for sample in sample_names:
+        nanoplot_html_path = Path(nanoplot_dir, f"{output_prefix}{sample}_{nanoplot_type_prefix}_NanoPlot-report{assay_suffix}.html")
+        check_for_file_and_contents(validation_log, nanoplot_html_path)
 
 def check_fastq_files(validation_log, technology, sample_names, reads_dir, 
-                      unpaired_suffix, R1_suffix="", R2_suffix="", isSingle_ended=True):
+                      unpaired_suffix, R1_suffix="", R2_suffix="", isSingle_ended=True, output_prefix=""):
     """ Explicit check loop verifying every fastq sample bundle is non-empty and accessible """
     for sample in sample_names:
         if technology == "illumina":
             if not isSingle_ended:
-                check_for_file_and_contents(validation_log, Path(reads_dir, f"{sample}{R1_suffix}"))
-                check_for_file_and_contents(validation_log, Path(reads_dir, f"{sample}{R2_suffix}"))
+                check_for_file_and_contents(validation_log, Path(reads_dir, f"{output_prefix}{sample}{R1_suffix}"))
+                check_for_file_and_contents(validation_log, Path(reads_dir, f"{output_prefix}{sample}{R2_suffix}"))
             else:
-                check_for_file_and_contents(validation_log, Path(reads_dir, f"{sample}{unpaired_suffix}"))
+                check_for_file_and_contents(validation_log, Path(reads_dir, f"{output_prefix}{sample}{unpaired_suffix}"))
         else:
-            check_for_file_and_contents(validation_log, Path(reads_dir, f"{sample}{unpaired_suffix}"))
+            check_for_file_and_contents(validation_log, Path(reads_dir, f"{output_prefix}{sample}{unpaired_suffix}"))
 
 def check_plots_for_samples(validation_log, sample_names, plot_path):
     """ Checks text & binary image encodings for unique sample keywords to guarantee plot completeness """
@@ -321,7 +323,7 @@ def get_failed_assemblies(failed_assemblies):
             for line in failed:
                 sample = line.strip().split("\t")[0]
                 failed_assemblies_list.append(sample)
-                manifest_data["assembly_failed"].append(sample)
+                manifest_data["failed_assemblies"].append(sample)
     return failed_assemblies_list
 
 def check_assembly_based_file(validation_log, sample, file_path, failed_assemblies_list, assembly = True):
@@ -331,16 +333,16 @@ def check_assembly_based_file(validation_log, sample, file_path, failed_assembli
                 report_failure(validation_log, f"The file '{file_path}' is empty, but sample is not in Failed-assemblies tracking logs.", missing_file=file_path)
     else:
         report_failure(validation_log, f"The expected file '{file_path}' does not exist.", missing_file=file_path)
-    
+
 def check_assembly_based_genes_file(validation_log, sample, file_path, failed_assemblies_list):
     if os.path.exists(file_path) and sample not in failed_assemblies_list:
         if not os.path.getsize(file_path) > 0:
             report_failure(validation_log, f"The expected gene architecture file '{file_path}' exists, but appears to be empty.", missing_file=file_path)
 
 def check_assemblies(validation_log, sample_names, failed_assemblies_list,
-                     assembly_suffix, assemblies_dir, assembly_summary):
+                     assembly_suffix, assemblies_dir, assembly_summary, output_prefix=""):
     for sample in sample_names:
-        curr_fasta_path = Path(assemblies_dir, f"{sample}{assembly_suffix}")
+        curr_fasta_path = Path(assemblies_dir, f"{output_prefix}{sample}{assembly_suffix}")
         if sample not in failed_assemblies_list:
             check_assembly_based_file(validation_log, sample, curr_fasta_path, failed_assemblies_list)
             check_general_fasta_format(validation_log, curr_fasta_path)
@@ -351,38 +353,38 @@ def check_assemblies(validation_log, sample_names, failed_assemblies_list,
     check_for_file_and_contents(validation_log, assembly_summary_path)
 
 def check_genes(validation_log, sample_names, failed_assemblies_list, genes_dir,
-                 predicted_gene_file_suffixes, gene_fasta_suffixes):
+                 predicted_gene_file_suffixes, gene_fasta_suffixes, output_prefix=""):
     for sample in sample_names:
         if sample not in failed_assemblies_list:
             for suffix in predicted_gene_file_suffixes:
-                curr_file_path = Path(genes_dir, f"{sample}{suffix}")
+                curr_file_path = Path(genes_dir, f"{output_prefix}{sample}{suffix}")
                 check_assembly_based_genes_file(validation_log, sample, curr_file_path, failed_assemblies_list)
                 if os.path.exists(curr_file_path) and os.path.getsize(curr_file_path) > 0:
                     if curr_file_path not in manifest_data["verified"]:
                         manifest_data["verified"].append(str(curr_file_path))
             for suffix in gene_fasta_suffixes:
-                curr_fasta_path = Path(genes_dir, f"{sample}{suffix}")
+                curr_fasta_path = Path(genes_dir, f"{output_prefix}{sample}{suffix}")
                 if os.path.exists(curr_fasta_path) and os.path.getsize(curr_fasta_path) > 0:
                     check_general_fasta_format(validation_log, curr_fasta_path)
 
-def check_contig_annotation(validation_log, sample_names, annotations_and_tax_dir, annotations_suffixes):
+def check_contig_annotation(validation_log, sample_names, annotations_and_tax_dir, annotations_suffixes, output_prefix=""):
     for sample in sample_names:
         for suffix in annotations_suffixes:
-            curr_file_path = Path(annotations_and_tax_dir, f"{sample}{suffix}")
+            curr_file_path = Path(annotations_and_tax_dir, f"{output_prefix}{sample}{suffix}")
             check_for_file_and_contents(validation_log, curr_file_path)
 
 def check_mapping(validation_log, sample_names, mapping_dir, failed_assemblies_list,
-                  mapping_dir_suffixes_all_have, mapping_info_suffix):
+                  mapping_dir_suffixes_all_have, mapping_info_suffix, output_prefix=""):
     for sample in sample_names:
         for suffix in mapping_dir_suffixes_all_have:
-            curr_file_path = Path(mapping_dir, f"{sample}{suffix}")
+            curr_file_path = Path(mapping_dir, f"{output_prefix}{sample}{suffix}")
             if sample not in failed_assemblies_list:
                 check_assembly_based_file(validation_log, sample, curr_file_path, failed_assemblies_list)
                 if os.path.exists(curr_file_path) and os.path.getsize(curr_file_path) > 0:
                     if curr_file_path not in manifest_data["verified"]:
                         manifest_data["verified"].append(str(curr_file_path))
         if sample not in failed_assemblies_list:
-            curr_file_path = Path(mapping_dir, f"{sample}{mapping_info_suffix}")
+            curr_file_path = Path(mapping_dir, f"{output_prefix}{sample}{mapping_info_suffix}")
             check_assembly_based_file(validation_log, sample, curr_file_path, failed_assemblies_list)
             if os.path.exists(curr_file_path) and os.path.getsize(curr_file_path) > 0:
                 if curr_file_path not in manifest_data["verified"]:
@@ -462,7 +464,9 @@ def main():
     tech = str(args.technology)
     stype = str(args.sample_type)
 
-    outdir = args.outdir
+    outdir = Path(args.outdir)
+
+    manifest_data["outdir"] = args.outdir
     
     raw_dir = Path(outdir, "Merged_Sequence_Data")
     filtered_dir = Path(outdir, "Filtered_Sequence_Data")
@@ -516,103 +520,117 @@ def main():
     check_multiqc_outputs(validation_log, tech, sample_names, raw_multiqc_zip, raw_prefix, 
                           args.raw_R1_suffix, args.raw_R2_suffix, args.raw_suffix, args.single_ended)
     append_message_to_log(validation_log, f"    - all expected samples were found in raw multiqc files in {raw_dir}/MultiQC_Reports")
+    if tech == "nanopore":
+        check_nanoplot_outputs(validation_log, sample_names, Path(raw_dir, "NanoPlots"), raw_prefix, output_prefix, assay_suffix)
+        append_message_to_log(validation_log, f"    - all expected NanoPlot reports were found in {raw_dir}/NanoPlots")
     
     filtered_multiqc_zip = Path(filtered_dir, f"MultiQC_Reports/{output_prefix}filtered_multiqc{assay_suffix}_data.zip")
     check_multiqc_outputs(validation_log, tech, sample_names, filtered_multiqc_zip, "filtered", 
                           args.filtered_R1_suffix, args.filtered_R2_suffix, args.filtered_suffix, args.single_ended)
     append_message_to_log(validation_log, f"    - all expected samples were found in filtered multiqc files in {filtered_dir}/MultiQC_Reports")
+    if tech == "nanopore":
+        check_nanoplot_outputs(validation_log, sample_names, Path(filtered_dir, "NanoPlots"), "filtered", output_prefix, assay_suffix)
+        append_message_to_log(validation_log, f"    - all expected NanoPlot reports were found in {filtered_dir}/NanoPlots")
 
     if stype == "low_biomass":
         decontam_zip = Path(decontam_dir, f"MultiQC_Reports/{output_prefix}decontam_multiqc{assay_suffix}_data.zip")
         check_multiqc_outputs(validation_log, tech, sample_names, decontam_zip, "decontam", 
                               args.decontam_R1_suffix, args.decontam_R2_suffix, args.decontam_suffix, args.single_ended)
         append_message_to_log(validation_log, f"    - all expected samples were found in decontam multiqc files in {decontam_dir}/MultiQC_Reports")
+        if tech == "nanopore":
+            check_nanoplot_outputs(validation_log, sample_names, Path(decontam_dir, "NanoPlots"), "decontam", output_prefix, assay_suffix)
+            append_message_to_log(validation_log, f"    - all expected NanoPlot reports were found in {decontam_dir}/NanoPlots")
         
     if args.host_removed:
         host_zip = Path(host_dir, f"MultiQC_Reports/{output_prefix}HostRm_multiqc{assay_suffix}_data.zip")
-        check_multiqc_outputs(validation_log, tech, sample_names, host_zip, "host", 
+        check_multiqc_outputs(validation_log, tech, sample_names, host_zip, "HostRm", 
                               args.host_R1_suffix, args.host_R2_suffix, args.host_suffix, args.single_ended)
         append_message_to_log(validation_log, f"    - all expected samples were found in host multiqc files in {host_dir}/MultiQC_Reports")
+        if tech == "nanopore":
+            check_nanoplot_outputs(validation_log, sample_names, Path(host_dir, "NanoPlots"), "HostRm", output_prefix, assay_suffix)
+            append_message_to_log(validation_log, f"    - all expected NanoPlot reports were found in {host_dir}/NanoPlots")
         
     if tech == "nanopore":
         trimmed_zip = Path(trimmed_dir, f"MultiQC_Reports/{output_prefix}trimmed_multiqc{assay_suffix}_data.zip")
         check_multiqc_outputs(validation_log, tech, sample_names, trimmed_zip, "trimmed", "", "", args.trimmed_suffix, True)
         append_message_to_log(validation_log, f"    - all expected samples were found in trimmed multiqc files in {trimmed_dir}/MultiQC_Reports")
+        check_nanoplot_outputs(validation_log, sample_names, Path(trimmed_dir, "NanoPlots"), "trimmed", output_prefix, assay_suffix)
+        append_message_to_log(validation_log, f"    - all expected NanoPlot reports were found in {trimmed_dir}/NanoPlots")
         
         hrrm_zip = Path(hrrm_dir, f"MultiQC_Reports/{output_prefix}HRrm_multiqc{assay_suffix}_data.zip")
         check_multiqc_outputs(validation_log, tech, sample_names, hrrm_zip, "HRrm", "", "", args.human_suffix, True)
         append_message_to_log(validation_log, f"    - all expected samples were found in human removed multiqc files in {hrrm_dir}/MultiQC_Reports")
+        check_nanoplot_outputs(validation_log, sample_names, Path(hrrm_dir, "NanoPlots"), "HRrm", output_prefix, assay_suffix)
+        append_message_to_log(validation_log, f"    - all expected NanoPlot reports were found in {hrrm_dir}/NanoPlots")
 
     # ---------------  Fastq files validation ---------------------------------------------
     if tech == "illumina":
-       check_fastq_files(validation_log, tech, sample_names, Path(filtered_dir, "Fastq/Fastp"), args.filtered_suffix, args.filtered_R1_suffix, args.filtered_R2_suffix, args.single_ended)
+       check_fastq_files(validation_log, tech, sample_names, Path(filtered_dir, "Fastq/Fastp"), args.filtered_suffix, args.filtered_R1_suffix, args.filtered_R2_suffix, args.single_ended, output_prefix=output_prefix)
        append_message_to_log(validation_log, f"    - all expected fastq read files were found in {filtered_dir}/Fastq/Fastp")
 
     if tech == "nanopore":
-        check_fastq_files(validation_log, tech, sample_names, Path(hrrm_dir, "Fastq"), args.human_suffix)
+        check_fastq_files(validation_log, tech, sample_names, Path(hrrm_dir, "Fastq"), args.human_suffix, output_prefix=output_prefix)
         append_message_to_log(validation_log, f"    - all expected fastq read files were found in {hrrm_dir}/Fastq")
  
     if stype == "low_biomass":
-        check_fastq_files(validation_log, tech, sample_names, Path(decontam_dir, "Fastq"), args.decontam_suffix, args.decontam_R1_suffix, args.decontam_R2_suffix, args.single_ended)
+        check_fastq_files(validation_log, tech, sample_names, Path(decontam_dir, "Fastq"), args.decontam_suffix, args.decontam_R1_suffix, args.decontam_R2_suffix, args.single_ended, output_prefix=output_prefix)
         append_message_to_log(validation_log, f"    - all expected decontaminated fastq read files were found in {decontam_dir}/Fastq")
 
     if args.host_removed:
-         check_fastq_files(validation_log, tech, sample_names, Path(host_dir, "Fastq"), args.host_suffix, args.host_R1_suffix, args.host_R2_suffix, args.single_ended)
+         check_fastq_files(validation_log, tech, sample_names, Path(host_dir, "Fastq"), args.host_suffix, args.host_R1_suffix, args.host_R2_suffix, args.single_ended, output_prefix=output_prefix)
          append_message_to_log(validation_log, f"    - all expected host removed fastq read files were found in {host_dir}/Fastq")
 
 
     # ------------------ READ-BASED PROFILING ARCHITECTURE AUDIT ------------------
     expected_read_based_outputs = [
-        f"Humann_Outputs/Gene_Families/Gene-families{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-cpm{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-grouped-by-taxa{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-KO{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-KO-cpm{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-KO_filtered{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-uniref{assay_suffix}.tsv",
-        f"Humann_Outputs/Gene_Families/Gene-families-uniref_filtered{assay_suffix}.tsv",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances-cpm{assay_suffix}.tsv",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances-grouped-by-taxa{assay_suffix}.tsv",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances{assay_suffix}.tsv",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_filtered{assay_suffix}.tsv",
-        f"Humann_Outputs/Pathway_Coverages/Pathway-coverages-grouped-by-taxa{assay_suffix}.tsv",
-        f"Humann_Outputs/Pathway_Coverages/Pathway-coverages{assay_suffix}.tsv"
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families{assay_suffix}.tsv",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-cpm{assay_suffix}.tsv",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-grouped-by-taxa{assay_suffix}.tsv",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO-cpm{assay_suffix}.tsv",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_filtered{assay_suffix}.tsv",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_filtered{assay_suffix}.tsv",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances-cpm{assay_suffix}.tsv",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances-grouped-by-taxa{assay_suffix}.tsv",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances{assay_suffix}.tsv",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_filtered{assay_suffix}.tsv",
+        f"Humann_Outputs/Pathway_Coverages/{output_prefix}Pathway-coverages-grouped-by-taxa{assay_suffix}.tsv",
+        f"Humann_Outputs/Pathway_Coverages/{output_prefix}Pathway-coverages{assay_suffix}.tsv"
     ]
     if stype == "low_biomass":
         expected_read_based_outputs.extend([
-            f"Humann_Outputs/Gene_Families/Gene-families-KO_decontam_results{assay_suffix}.tsv",
-            f"Humann_Outputs/Gene_Families/Gene-families-KO_decontam{assay_suffix}.tsv",
-            f"Humann_Outputs/Gene_Families/Gene-families-uniref_decontam_results{assay_suffix}.tsv",
-            f"Humann_Outputs/Gene_Families/Gene-families-uniref_decontam{assay_suffix}.tsv",
-            f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_decontam{assay_suffix}.tsv",
-            f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_decontam_results{assay_suffix}.tsv"
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam_results{assay_suffix}.tsv",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam{assay_suffix}.tsv",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam_results{assay_suffix}.tsv",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam{assay_suffix}.tsv",
+            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam{assay_suffix}.tsv",
+            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam_results{assay_suffix}.tsv"
         ])
     check_read_based_outputs(validation_log, expected_read_based_outputs, read_based_dir)
     append_message_to_log(validation_log, f"    - all expected files for read-based analysis were found in the {read_based_dir} directory")
 
     # HUMANN HEATMAP AUDITS
     humann_plots = [
-        f"Humann_Outputs/Gene_Families/Gene-families-KO_filtered_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-KO_filtered_top_50_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-KO_unfiltered_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-KO_unfiltered_top_50_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-uniref_filtered_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-uniref_filtered_top_50_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-uniref_unfiltered_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Gene_Families/Gene-families-uniref_unfiltered_top_50_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_filtered_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_filtered_top_50_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_unfiltered_heatmap{assay_suffix}.png",
-        f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_unfiltered_top_50_heatmap{assay_suffix}.png"
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_filtered_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_filtered_top_50_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_unfiltered_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_unfiltered_top_50_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_filtered_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_filtered_top_50_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_unfiltered_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_unfiltered_top_50_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_filtered_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_filtered_top_50_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_unfiltered_heatmap{assay_suffix}.png",
+        f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_unfiltered_top_50_heatmap{assay_suffix}.png"
     ]
     if stype == "low_biomass":
         humann_plots.extend([
-            f"Humann_Outputs/Gene_Families/Gene-families-KO_decontam_heatmap{assay_suffix}.png",
-            f"Humann_Outputs/Gene_Families/Gene-families-KO_decontam_top_50_heatmap{assay_suffix}.png",
-            f"Humann_Outputs/Gene_Families/Gene-families-uniref_decontam_heatmap{assay_suffix}.png",
-            f"Humann_Outputs/Gene_Families/Gene-families-uniref_decontam_top_50_heatmap{assay_suffix}.png",
-            f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_decontam_heatmap{assay_suffix}.png",
-            f"Humann_Outputs/Pathway_Abundances/Pathway-abundances_decontam_top_50_heatmap{assay_suffix}.png"
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam_heatmap{assay_suffix}.png",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam_top_50_heatmap{assay_suffix}.png",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam_heatmap{assay_suffix}.png",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam_top_50_heatmap{assay_suffix}.png",
+            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam_heatmap{assay_suffix}.png",
+            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam_top_50_heatmap{assay_suffix}.png"
         ])
     for h_plot in humann_plots:
         check_plots_for_samples(validation_log, sample_names, Path(read_based_dir, h_plot))
@@ -624,84 +642,84 @@ def main():
     for p in profs:
         p_dir = Path(read_based_dir, f"{p}_Outputs")
         if p == "Kraken2":
-            check_for_file_and_contents(validation_log, Path(p_dir, f"MultiQC_Reports/kraken2_multiqc{assay_suffix}.html"))
-        check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{p.lower()}_filtered_species_table{assay_suffix}.tsv"))
-        check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{p.lower()}_species_table{assay_suffix}.tsv"))
+            check_for_file_and_contents(validation_log, Path(p_dir, f"MultiQC_Reports/{output_prefix}kraken2_multiqc{assay_suffix}.html"))
+        check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{output_prefix}{p.lower()}_filtered_species_table{assay_suffix}.tsv"))
+        check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{output_prefix}{p.lower()}_species_table{assay_suffix}.tsv"))
         if p == "Metaphlan":
-            check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/metaphlan-taxonomy{assay_suffix}.tsv"))
+            check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{output_prefix}metaphlan-taxonomy{assay_suffix}.tsv"))
         
         # Plot verification
-        check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Barplots/{p.lower()}_filtered_species_barplot{assay_suffix}.html"))
-        check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Barplots/{p.lower()}_unfiltered_species_barplot{assay_suffix}.html"))
-        check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Krona_Reports/{p.lower()}-report{assay_suffix}.html"))
+        check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Barplots/{output_prefix}{p.lower()}_filtered_species_barplot{assay_suffix}.html"))
+        check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Barplots/{output_prefix}{p.lower()}_unfiltered_species_barplot{assay_suffix}.html"))
+        check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Krona_Reports/{output_prefix}{p.lower()}-report{assay_suffix}.html"))
         
         if stype == "low_biomass":
-            check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{p.lower()}_decontam_results{assay_suffix}.tsv"))
-            check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{p.lower()}_decontam_species_table{assay_suffix}.tsv"))
-            check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Barplots/{p.lower()}_decontam_species_barplot{assay_suffix}.html"))
+            check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{output_prefix}{p.lower()}_decontam_results{assay_suffix}.tsv"))
+            check_for_file_and_contents(validation_log, Path(p_dir, f"Count_Tables/{output_prefix}{p.lower()}_decontam_species_table{assay_suffix}.tsv"))
+            check_plots_for_samples(validation_log, sample_names, Path(p_dir, f"Barplots/{output_prefix}{p.lower()}_decontam_species_barplot{assay_suffix}.html"))
     append_message_to_log(validation_log, f"    - all taxonomic profiler tables and interactive barplots/Krona reports verified complete")
 
     # ------------------ ASSEMBLY-BASED VALIDATION MATRIX ------------------
-    assembly_summary = f"assembly-summaries{assay_suffix}.tsv"
-    failed_assemblies = Path(assemblies_dir, f"Failed-assemblies{assay_suffix}.tsv")
+    assembly_summary = f"{output_prefix}assembly-summaries{assay_suffix}.tsv"
+    failed_assemblies = Path(assemblies_dir, f"{output_prefix}Failed-assemblies{assay_suffix}.tsv")
     failed_assemblies_list = get_failed_assemblies(failed_assemblies)
 
-    check_assemblies(validation_log, sample_names, failed_assemblies_list, f"-assembly{assay_suffix}.fasta", assemblies_dir, assembly_summary)
+    check_assemblies(validation_log, sample_names, failed_assemblies_list, f"-assembly{assay_suffix}.fasta", assemblies_dir, assembly_summary, output_prefix)
     append_message_to_log(validation_log, f"    - all expected samples had assemblies found in {assemblies_dir}")
     
-    check_genes(validation_log, sample_names, failed_assemblies_list, genes_dir, [f"-genes{assay_suffix}.faa", f"-genes{assay_suffix}.gff", f"-genes{assay_suffix}.fasta"], [f"-genes{assay_suffix}.faa", f"-genes{assay_suffix}.fasta"])
+    check_genes(validation_log, sample_names, failed_assemblies_list, genes_dir, [f"-genes{assay_suffix}.faa", f"-genes{assay_suffix}.gff", f"-genes{assay_suffix}.fasta"], [f"-genes{assay_suffix}.faa", f"-genes{assay_suffix}.fasta"], output_prefix)
     append_message_to_log(validation_log, f"    - all expected predicted genes files were found in the {genes_dir} directory")
     
-    check_contig_annotation(validation_log, sample_names, annotations_and_tax_dir, [f"-contig-coverage-and-tax{assay_suffix}.tsv", f"-gene-coverage-annotation-and-tax{assay_suffix}.tsv"])
+    check_contig_annotation(validation_log, sample_names, annotations_and_tax_dir, [f"-contig-coverage-and-tax{assay_suffix}.tsv", f"-gene-coverage-annotation-and-tax{assay_suffix}.tsv"], output_prefix)
     append_message_to_log(validation_log, f"    - all expected annotation files were found in the {annotations_and_tax_dir} directory")
     
-    check_mapping(validation_log, sample_names, mapping_dir, failed_assemblies_list, [f"{assay_suffix}.bam", f"-metabat-assembly-depth{assay_suffix}.tsv"], f"-mapping-info{assay_suffix}.txt")
+    check_mapping(validation_log, sample_names, mapping_dir, failed_assemblies_list, [f"{assay_suffix}.bam", f"-metabat-assembly-depth{assay_suffix}.tsv"], f"-mapping-info{assay_suffix}.txt", output_prefix)
     append_message_to_log(validation_log, f"    - all expected read mapping files were found in the {mapping_dir} directory")
 
     expected_assembly_combined_outputs = [
-        f"Contig-level/Combined-contig-level-taxonomy-coverages-CPM{assay_suffix}.tsv",
-        f"Contig-level/Combined-contig-level-taxonomy-coverages{assay_suffix}.tsv",
-        f"Contig-level/Combined-contig-level-taxonomy{assay_suffix}.tsv",
-        f"Contig-level/Combined-contig-level-taxonomy_filtered{assay_suffix}.tsv",
-        f"Gene-level/KO/Combined-gene-level-KO-function-coverages-CPM{assay_suffix}.tsv",
-        f"Gene-level/KO/Combined-gene-level-KO-function-coverages{assay_suffix}.tsv",
-        f"Gene-level/KO/Combined-gene-level-KO-function{assay_suffix}.tsv",
-        f"Gene-level/KO/Combined-gene-level-KO-function_filtered{assay_suffix}.tsv",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy-coverages-CPM{assay_suffix}.tsv",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy-coverages{assay_suffix}.tsv",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy{assay_suffix}.tsv",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_filtered{assay_suffix}.tsv"
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy-coverages-CPM{assay_suffix}.tsv",
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy-coverages{assay_suffix}.tsv",
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_filtered{assay_suffix}.tsv",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function-coverages-CPM{assay_suffix}.tsv",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function-coverages{assay_suffix}.tsv",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_filtered{assay_suffix}.tsv",
+        f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy-coverages-CPM{assay_suffix}.tsv",
+        f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy-coverages{assay_suffix}.tsv",
+        f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_filtered{assay_suffix}.tsv"
     ]
     if stype == "low_biomass":
         expected_assembly_combined_outputs.extend([
-            f"Contig-level/Combined-contig-level-taxonomy_decontam_results{assay_suffix}.tsv",
-            f"Gene-level/KO/Combined-gene-level-KO-function_decontam{assay_suffix}.tsv",
-            f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_decontam_results{assay_suffix}.tsv"
+            f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_decontam_results{assay_suffix}.tsv",
+            f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_decontam_species_table{assay_suffix}.tsv",
+            f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_decontam_results{assay_suffix}.tsv",
+            f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_decontam_table{assay_suffix}.tsv",
+            f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_decontam_results{assay_suffix}.tsv",
+            f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_decontam_species_table{assay_suffix}.tsv"
         ])
     check_combined_outputs(validation_log, combined_output_dir, expected_assembly_combined_outputs)
     append_message_to_log(validation_log, f"    - all expected cross-sample combined matrices were found in {combined_output_dir}")
 
     combined_plots = [
-        f"Contig-level/Combined-contig-level-taxonomy_filtered_heatmap{assay_suffix}.png",
-        f"Contig-level/Combined-contig-level-taxonomy_filtered_top_50_heatmap{assay_suffix}.png",
-        f"Contig-level/Combined-contig-level-taxonomy_unfiltered_heatmap{assay_suffix}.png",
-        f"Contig-level/Combined-contig-level-taxonomy_unfiltered_top_50_heatmap{assay_suffix}.png",
-        f"Gene-level/KO/Combined-gene-level-KO-function_filtered_heatmap{assay_suffix}.png",
-        f"Gene-level/KO/Combined-gene-level-KO-function_filtered_top_50_heatmap{assay_suffix}.png",
-        f"Gene-level/KO/Combined-gene-level-KO-function_unfiltered_heatmap{assay_suffix}.png",
-        f"Gene-level/KO/Combined-gene-level-KO-function_unfiltered_top_50_heatmap{assay_suffix}.png",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_filtered_heatmap{assay_suffix}.png",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_filtered_top_50_heatmap{assay_suffix}.png",
-        f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_unfiltered_heatmap{assay_suffix}.png"
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_filtered_heatmap{assay_suffix}.png",
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_filtered_top_50_heatmap{assay_suffix}.png",
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_unfiltered_heatmap{assay_suffix}.png",
+        f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_unfiltered_top_50_heatmap{assay_suffix}.png",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_filtered_heatmap{assay_suffix}.png",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_filtered_top_50_heatmap{assay_suffix}.png",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_unfiltered_heatmap{assay_suffix}.png",
+        f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_unfiltered_top_50_heatmap{assay_suffix}.png",
+        f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_filtered_heatmap{assay_suffix}.png",
+        f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_filtered_top_50_heatmap{assay_suffix}.png",
+        f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_unfiltered_heatmap{assay_suffix}.png"
     ]
     if stype == "low_biomass":
         combined_plots.extend([
-            f"Contig-level/Combined-contig-level-taxonomy_decontam_heatmap{assay_suffix}.png",
-            f"Contig-level/Combined-contig-level-taxonomy_decontam_top_50_heatmap{assay_suffix}.png",
-            f"Gene-level/KO/Combined-gene-level-KO-function_decontam_heatmap{assay_suffix}.png",
-            f"Gene-level/KO/Combined-gene-level-KO-function_decontam_top_50_heatmap{assay_suffix}.png",
-            f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_decontam_heatmap{assay_suffix}.png",
-            f"Gene-level/Taxonomy/Combined-gene-level-taxonomy_decontam_top_50_heatmap{assay_suffix}.png"
+            f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_decontam_heatmap{assay_suffix}.png",
+            f"Contig-level/{output_prefix}Combined-contig-level-taxonomy_decontam_top_50_heatmap{assay_suffix}.png",
+            f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_decontam_heatmap{assay_suffix}.png",
+            f"Gene-level/KO/{output_prefix}Combined-gene-level-KO-function_decontam_top_50_heatmap{assay_suffix}.png",
+            f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_decontam_heatmap{assay_suffix}.png",
+            f"Gene-level/Taxonomy/{output_prefix}Combined-gene-level-taxonomy_decontam_top_50_heatmap{assay_suffix}.png"
         ])
     assembled_samples = [s for s in sample_names if s not in failed_assemblies_list]
     for c_plot in combined_plots:
@@ -710,32 +728,32 @@ def main():
 
     output_fasta_bins = [f for f in get_files_in_dir(bins_dir) if f.endswith(".zip")]
     if output_fasta_bins:
-        check_bins(validation_log, bins_dir, f"bins-overview{assay_suffix}.tsv", output_fasta_bins) 
+        check_bins(validation_log, bins_dir, f"{output_prefix}bins-overview{assay_suffix}.tsv", output_fasta_bins) 
         append_message_to_log(validation_log, f"    - recovered genomic bins and summaries found in {bins_dir}")
     else:
-        if Path(bins_dir, f"bins-overview{assay_suffix}.tsv") not in manifest_data["missing_optional"]:
-            manifest_data["missing_optional"].append(str(Path(bins_dir, f"bins-overview{assay_suffix}.tsv")))
+        if Path(bins_dir, f"{output_prefix}bins-overview{assay_suffix}.tsv") not in manifest_data["missing_optional"]:
+            manifest_data["missing_optional"].append(str(Path(bins_dir, f"{output_prefix}bins-overview{assay_suffix}.tsv")))
         append_message_to_log(validation_log, f"    - no recovered genomic bins were found in {bins_dir}")
     
     output_fasta_mags = [f for f in get_files_in_dir(MAGs_dir) if f.endswith(".zip")]
     # If MAGs are present then check for the KEGG Decoder outputs
-    KEGG_files = [Path(MAGs_dir, f"KEGG_Outputs/MAG-KEGG-Decoder-out{assay_suffix}.tsv"),
-                  Path(MAGs_dir, f"KEGG_Outputs/MAG-KEGG-Decoder-out{assay_suffix}.html"), 
-                  Path(MAGs_dir, f"KEGG_Outputs/MAG-level-KO-annotations{assay_suffix}.tsv")]
+    KEGG_files = [Path(MAGs_dir, f"KEGG_Outputs/{output_prefix}MAG-KEGG-Decoder-out{assay_suffix}.tsv"),
+                  Path(MAGs_dir, f"KEGG_Outputs/{output_prefix}MAG-KEGG-Decoder-out{assay_suffix}.html"), 
+                  Path(MAGs_dir, f"KEGG_Outputs/{output_prefix}MAG-level-KO-annotations{assay_suffix}.tsv")]
     if output_fasta_mags:
-        check_mags(validation_log, MAGs_dir, output_fasta_mags, output_fasta_bins, f"MAGs-overview{assay_suffix}.tsv")
+        check_mags(validation_log, MAGs_dir, output_fasta_mags, output_fasta_bins, f"{output_prefix}MAGs-overview{assay_suffix}.tsv")
         for file in KEGG_files:
             check_for_file_and_contents(validation_log, file)
         append_message_to_log(validation_log, f"    - recovered meta-assembled genomes and summaries found in {MAGs_dir}")
     else:
-        if Path(MAGs_dir, f"MAGs-overview{assay_suffix}.tsv") not in manifest_data["missing_optional"]:
-            manifest_data["missing_optional"].append(str(Path(MAGs_dir, f"MAGs-overview{assay_suffix}.tsv")))
+        if Path(MAGs_dir, f"{output_prefix}MAGs-overview{assay_suffix}.tsv") not in manifest_data["missing_optional"]:
+            manifest_data["missing_optional"].append(str(Path(MAGs_dir, f"{output_prefix}MAGs-overview{assay_suffix}.tsv")))
         for file in KEGG_files:
             if file not in manifest_data["missing_optional"]:
                 manifest_data["missing_optional"].append(str(file))
         append_message_to_log(validation_log, f"    - no recovered meta-assembled genomes were found in {MAGs_dir}")    
 
-    assembly_based_overview_table = Path(assembly_based_dir, f"Assembly-based-processing-overview{assay_suffix}.tsv")
+    assembly_based_overview_table = Path(assembly_based_dir, f"{output_prefix}Assembly-based-processing-overview{assay_suffix}.tsv")
     check_assembly_based_overview_table(validation_log, sample_names, assembly_based_overview_table)
     append_message_to_log(validation_log, f"    - {assembly_based_overview_table} was successfully validated")
 
