@@ -259,7 +259,7 @@ if(type == "KO"){
 
 }
 
-
+colnames(table2write) <-  colnames(table2write) %>% str_remove_all(suffix)
 # type - taxonomy or KO
 # level - Contig or Gene
 

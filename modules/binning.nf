@@ -65,7 +65,7 @@ process METABAT_BINNING {
 
             # only running if there are contigs with coverage 
             # information in the coverage file we just generated
-            if [ `wc -l ${sample_id}-metabat-assembly-depth.tsv | sed 's/^ *//' | cut -f 1 -d " "` -gt 1 ]; then 
+            if [ `wc -l ${sample_id}-metabat-assembly-depth${params.assay_suffix}.tsv | sed 's/^ *//' | cut -f 1 -d " "` -gt 1 ]; then 
 
                 metabat2  \\
                     --inFile ${assembly} \\

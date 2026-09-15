@@ -135,11 +135,11 @@ suffix <- opt[["assay-suffix"]]  # "GLlbnMetag"
 feature_table <- read_delim(feature_table_file) %>%  as.data.frame()
 rownames(feature_table) <- feature_table[[1]]
 feature_table <- feature_table[,-1] %>% as.matrix()
-colnames(feature_table) <-  colnames(feature_table) %>% str_remove_all("barcode")
+colnames(feature_table) <-  colnames(feature_table) %>% str_remove_all("barcode") %>% str_remove_all(suffix)
 
 # Prepare metadata
 metadata <- read_delim(metdata_file) %>% as.data.frame()
-row.names(metadata) <- metadata[,samples_column] %>% str_remove_all("barcode")
+row.names(metadata) <- metadata[,samples_column] %>% str_remove_all("barcode") %>% str_remove_all(suffix)
 
 # GFet common samples and re-arrange feature table and metadata
 common_samples <- intersect(colnames(feature_table), rownames(metadata))
