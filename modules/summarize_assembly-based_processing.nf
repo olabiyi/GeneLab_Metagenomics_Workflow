@@ -74,9 +74,9 @@ process GENERATE_ASSEMBLY_PROCESSING_OVERVIEW_TABLE {
         path("${params.additional_filename_prefix}Assembly-based-processing-overview${params.assay_suffix}.tsv")
     script:
         """
-        mkdir assemblies_dir/ && mv *-assembly.fasta assemblies_dir/
-        mkdir genes_dir/ && mv *-genes.faa genes_dir/ 
-        mkdir mapping_dir/ && mv *-metabat-assembly-depth.tsv *.bam  mapping_dir/
+        mkdir assemblies_dir/ && mv *-assembly${params.assay_suffix}.fasta assemblies_dir/
+        mkdir genes_dir/ && mv *-genes${params.assay_suffix}.faa genes_dir/ 
+        mkdir mapping_dir/ && mv *-metabat-assembly-depth${params.assay_suffix}.tsv *.bam  mapping_dir/
 
         mkdir bins_dir/
         if compgen -G *-bin*.fasta > /dev/null; then
