@@ -361,7 +361,8 @@ def add_read_counts_from_read_stats_file(df: pd.DataFrame, read_stats_file: Path
     read_stats = pd.read_csv(Path(read_stats_file), sep="\t", index_col=0)
     raw = read_stats["Raw"].astype(int)
     hrrm_perc = read_stats["Percent_human_reads_removed"].round(2)
-    decontam_perc = read_stats["Percent_blank_reads_removed"].round(2)
+    if "Percent_blank_reads_removed" in read_stats:
+        decontam_perc = read_stats["Percent_blank_reads_removed"].round(2)
 
     if not raw.empty:
         print("Adding raw read depth")
@@ -1141,10 +1142,16 @@ def main():
         tech_type = "short"
         if suffix != "" and suffix != "_GLmetagenomics":
             report_warning(
-                f"Incorrect assay suffix provided. metagenomics-lowbiomass-shortread requires either an empty suffix or '_GLmetagenomics', not {suffix}"
+                f"Incorrect assay suffix provided. metagenomics-shortread requires either an empty suffix or '_GLmetagenomics', not {suffix}"
             )
         resource_category = "metagenomics"
         osdr_technology_str = "Whole-Genome Shotgun Sequencing"
+    elif args.technology == "nanopore":
+        tech_type = "long"
+        if suffix != "":
+            report_warning(f"Incorrect assay suffix provided. metagenomics-lowbiomass-longread requires an empty suffix, not {suffix}")
+        resource_category = "metagenomics-lowbiomass-longread"
+        osdr_technology_str = "long read low-biomass DNA sequencing"
     else:
         report_failure_and_exit(
             f"Assay type {args.sample_type} and technology {args.technology} do not have a defined assay file format."

@@ -515,7 +515,7 @@ def main():
     sample_names = read_samples(args.runsheet)
 
     # ------------------ FASTQ SEQUENCE ANALYSIS AND VALIDATION ------------------
-    raw_prefix = "raw" if tech == "nanopore" else "HRrm"
+    raw_prefix = "raw" if tech == "nanopore" else "raw"
     raw_multiqc_zip = Path(raw_dir, f"MultiQC_Reports/{output_prefix}{raw_prefix}_multiqc{assay_suffix}_data.zip")
     check_multiqc_outputs(validation_log, tech, sample_names, raw_multiqc_zip, raw_prefix, 
                           args.raw_R1_suffix, args.raw_R2_suffix, args.raw_suffix, args.single_ended)
@@ -599,11 +599,11 @@ def main():
     if stype == "low_biomass":
         expected_read_based_outputs.extend([
             f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam_results{assay_suffix}.tsv",
-            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam{assay_suffix}.tsv",
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-KO_decontam_table{assay_suffix}.tsv",
             f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam_results{assay_suffix}.tsv",
-            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam{assay_suffix}.tsv",
-            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam{assay_suffix}.tsv",
-            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam_results{assay_suffix}.tsv"
+            f"Humann_Outputs/Gene_Families/{output_prefix}Gene-families-uniref_decontam_table{assay_suffix}.tsv",
+            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam_results{assay_suffix}.tsv",
+            f"Humann_Outputs/Pathway_Abundances/{output_prefix}Pathway-abundances_decontam_table{assay_suffix}.tsv"
         ])
     check_read_based_outputs(validation_log, expected_read_based_outputs, read_based_dir)
     append_message_to_log(validation_log, f"    - all expected files for read-based analysis were found in the {read_based_dir} directory")

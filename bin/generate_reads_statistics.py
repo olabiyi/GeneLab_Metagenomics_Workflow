@@ -95,7 +95,7 @@ def get_read_count(stage, zip_file, technology):
         data["Sample_ID"].append(k)
         data[stage].append(v[read_count_key])
         
-    # Dataframe from dictionar
+    # Dataframe from dictionary
     df = pd.DataFrame(data)
     # Delete unwanted suffix in sample names
     pattern = r'(_(raw|HRremoved_raw|filtered|trimmed|decontam|HRrm|HostRm))?_R\d+$'
@@ -162,44 +162,46 @@ def main():
     elif args.host_removed != "" and args.sample_type == "standard" and args.technology == "illumina":
         df['Percent_host_reads_removed'] = ((df['Filtered-trimmed'] - df['Host-removed'])/df['Filtered-trimmed']) * 100
 
+    column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 
+                    'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed']
     # Define column order for output file based on technology and whether host removed data is provided
     if args.technology == "nanopore":
-        # Host removed data is providedand sample type is low biomass
+        # Host removed data is provided and sample type is low biomass
         if args.host_removed != "" and args.sample_type == "low_biomass":
             column_order = ['Sample_ID', 'Raw', 'Filtered', 'Trimmed', 'Human-removed',
-            'Blank-removed', 'Host-removed',  'Percent_reads_filtered', 'Percent_reads_trimmed',
-            'Percent_human_reads_removed', 'Percent_blank_reads_removed', 'Percent_host_reads_removed']
+                            'Blank-removed', 'Host-removed',  'Percent_reads_filtered', 'Percent_reads_trimmed',
+                            'Percent_human_reads_removed', 'Percent_blank_reads_removed', 'Percent_host_reads_removed']
         # Host removed data is not provided and sample type is low biomass
         elif args.host_removed == "" and args.sample_type == "low_biomass":
             column_order = ['Sample_ID', 'Raw',  'Filtered', 'Trimmed', 'Human-removed',
-            'Blank-removed', 'Percent_reads_filtered', 'Percent_reads_trimmed', 
-            'Percent_human_reads_removed', 'Percent_blank_reads_removed']
+                            'Blank-removed', 'Percent_reads_filtered', 'Percent_reads_trimmed', 
+                            'Percent_human_reads_removed', 'Percent_blank_reads_removed']
         # Host removed data is not provided and sample type is standard
         elif args.host_removed == "" and args.sample_type == "standard":
             column_order = ['Sample_ID', 'Raw', 'Filtered', 'Trimmed', 'Human-removed',
-             'Percent_reads_filtered', 'Percent_reads_trimmed', 'Percent_human_reads_removed']
+                            'Percent_reads_filtered', 'Percent_reads_trimmed', 'Percent_human_reads_removed']
         # Host removed data is provided and sample type is standard
         else:   
             column_order = ['Sample_ID', 'Raw',  'Filtered', 'Trimmed', 'Human-removed',
-            'Host-removed',  'Percent_reads_filtered', 'Percent_reads_trimmed',
-            'Percent_human_reads_removed', 'Percent_host_reads_removed']
+                            'Host-removed',  'Percent_reads_filtered', 'Percent_reads_trimmed',
+                            'Percent_human_reads_removed', 'Percent_host_reads_removed']
 
     # Define column order for output file based on technology and whether host removed data is provided for illumina
     if args.technology == "illumina":
         # Host removed data is provided and sample type is low biomass
         if args.host_removed != "" and args.sample_type == "low_biomass":
-            column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 'Blank-removed', 'Host-removed', 
-                         'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed', 
-                         'Percent_blank_reads_removed', 'Percent_host_reads_removed']
+            column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 'Blank-removed', 'Host-removed',
+                            'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed', 
+                            'Percent_blank_reads_removed', 'Percent_host_reads_removed']
         # Host removed data is not provided and sample type is low biomass
         elif args.host_removed == "" and args.sample_type == "low_biomass":
-            column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 'Blank-removed', 
-                         'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed', 
-                         'Percent_blank_reads_removed']
+            column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 'Blank-removed',
+                            'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed', 
+                            'Percent_blank_reads_removed']
         # Host removed data is not provided and sample type is standard
         elif args.host_removed == "" and args.sample_type == "standard":
             column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 
-                         'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed']
+                            'Percent_human_reads_removed', 'Percent_reads_filtered-trimmed']
         # Host removed data is provided and sample type is standard 
         else:   
             column_order = ['Sample_ID', 'Raw', 'Human-removed', 'Filtered-trimmed', 'Host-removed',
@@ -212,9 +214,11 @@ def main():
     # Convert counts to integers and percentages to 2 decimal places
     for col in df.columns:
         if col.startswith("Percent"):
-            df[col] = df[col].round(2)
+            na_mask = df[col].notnull()
+            df.loc[na_mask, col] = df.loc[na_mask, col].astype(float).round(2)
         elif col != "Sample_ID":
-            df[col] = df[col].astype(int)
+            na_mask = df[col].notnull()
+            df.loc[na_mask, col] = df.loc[na_mask, col].astype(int)
 
     # Save output file
     df.to_csv(args.output, sep="\t", index=False)

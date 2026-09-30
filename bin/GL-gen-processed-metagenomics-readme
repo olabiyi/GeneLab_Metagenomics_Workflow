@@ -32,10 +32,10 @@ parser.add_argument("--protocol-id", default="GL-DPPD-7107-A",
                     help='Protocol document ID followed (default: "GL-DPPD-7107-A")')
 parser.add_argument("--runsheet", default="PE_file.csv",
                     help='Runsheet file name (default: "PE_file.csv")')
-parser.add_argument("--technology", default="illumina",
-                    help='Technology used for sequencing. One of "illumina" or "nanopore" (default: "illumina")')
-parser.add_argument("--sample-type", default="low_biomass",
-                    help='Sample type sequenced. One of "low_biomass" or "standard" (default: "standard")')
+parser.add_argument("--technology", default="illumina", choices=["illumina", "nanopore"],
+                    help='Technology used for sequencing. (default: "illumina")')
+parser.add_argument("--sample-type", default="low_biomass", choices=["low_biomass", "standard"],
+                    help='Sample type sequenced. (default: "standard")')
 parser.add_argument("--host-removed", default=False, action="store_true",
                     help='Indicates if host sequences were removed from the dataset (default: False)')
 parser.add_argument("--output-prefix", help="Output additional file prefix if there is one", action="store", default="")
@@ -772,30 +772,30 @@ def write_metagenomics_body(output, runsheet:Path, prefix: str, suffix: str, val
 
         add_level_two(f"{tool}_Outputs -", f"{tool} taxonomic profiling", output, pad)
         if tool == "Kraken2":
-            add_level_three("MultiQC_Reports -", "Kraken2 MultiQC summary reports", output, pad, gap=2 if is_tool_last else 0)
-            add_level_four(f"{prefix}kraken2_multiqc{suffix}.html", "MultiQC summary report for kraken2 classification", output, pad, gap=2 if is_tool_last else 0)
-            add_level_four(f"{prefix}kraken2_multiqc{suffix}_data.zip", "MultiQC data for kraken2 classification", output, pad, gap=2 if is_tool_last else 0)
-        add_level_three("Barplots/", "visualizations of taxonomic relative abundance", output, pad, gap=2 if is_tool_last else 0)
-        add_level_four(barplots[f"{tool.lower()}_unfiltered"]["file"], barplots[f"{tool.lower()}_unfiltered"]["def"], output, pad, gap=2 if is_tool_last else 0)
-        add_level_four(barplots[f"{tool.lower()}_filtered"]["file"], barplots[f"{tool.lower()}_filtered"]["def"], output, pad, gap=2 if is_tool_last else 0)
+            add_level_three("MultiQC_Reports -", "Kraken2 MultiQC summary reports", output, pad)
+            add_level_four(f"{prefix}kraken2_multiqc{suffix}.html", "MultiQC summary report for kraken2 classification", output, pad)
+            add_level_four(f"{prefix}kraken2_multiqc{suffix}_data.zip", "MultiQC data for kraken2 classification", output, pad)
+        add_level_three("Barplots/", "visualizations of taxonomic relative abundance", output, pad)
+        add_level_four(barplots[f"{tool.lower()}_unfiltered"]["file"], barplots[f"{tool.lower()}_unfiltered"]["def"], output, pad)
+        add_level_four(barplots[f"{tool.lower()}_filtered"]["file"], barplots[f"{tool.lower()}_filtered"]["def"], output, pad)
         if is_low_biomass and barplots[f"{tool.lower()}_decontam"]["file"] in verified:
-            add_level_four(barplots[f"{tool.lower()}_decontam"]["file"], barplots[f"{tool.lower()}_decontam"]["def"], output, pad, gap=2 if is_tool_last else 0)
-        add_spacer(output, num_lines=3, gap=2 if is_tool_last else 0)
-        add_level_three("Counts_Tables/", "species relative abundance tables", output, pad, gap=2 if is_tool_last else 0)
+            add_level_four(barplots[f"{tool.lower()}_decontam"]["file"], barplots[f"{tool.lower()}_decontam"]["def"], output, pad)
+        add_spacer(output, num_lines=3)
+        add_level_three("Counts_Tables/", "species relative abundance tables", output, pad)
         if tool == "Metaphlan":
-            add_level_four(f"{prefix}metaphlan-taxonomy{suffix}.tsv", "Metaphlan estimated taxonomic relative abundances", output, pad, gap=2 if is_tool_last else 0)
-        add_level_four(f"{prefix}{tool.lower()}_species_table{suffix}.tsv", f"{tool} raw species table", output, pad, gap=2 if is_tool_last else 0)
+            add_level_four(f"{prefix}metaphlan-taxonomy{suffix}.tsv", "Metaphlan estimated taxonomic relative abundances", output, pad)
+        add_level_four(f"{prefix}{tool.lower()}_species_table{suffix}.tsv", f"{tool} raw species table", output, pad)
         if read_based_tables[f"{tool.lower()}_filtered"]["file"] in verified:
-            add_level_four(read_based_tables[f"{tool.lower()}_filtered"]["file"], read_based_tables[f"{tool.lower()}_filtered"]["def"], output, pad, gap=2 if is_tool_last else 0)
+            add_level_four(read_based_tables[f"{tool.lower()}_filtered"]["file"], read_based_tables[f"{tool.lower()}_filtered"]["def"], output, pad)
         if is_low_biomass:
             if read_based_tables[f"{tool.lower()}_decontam_results"]["file"] in verified:
-                add_level_four(read_based_tables[f"{tool.lower()}_decontam_results"]["file"], read_based_tables[f"{tool.lower()}_decontam_results"]["def"], output, pad, gap=2 if is_tool_last else 0)
+                add_level_four(read_based_tables[f"{tool.lower()}_decontam_results"]["file"], read_based_tables[f"{tool.lower()}_decontam_results"]["def"], output, pad)
             if read_based_tables[f"{tool.lower()}_decontam_species"]["file"] in verified:
-                add_level_four(read_based_tables[f"{tool.lower()}_decontam_species"]["file"], read_based_tables[f"{tool.lower()}_decontam_species"]["def"], output, pad, gap=2 if is_tool_last else 0)
-        add_spacer(output, num_lines=3, gap=2 if is_tool_last else 0)
-        add_level_three("Krona_Reports/", "interactive hierarchical taxonomy plots", output, pad, gap=2 if is_tool_last else 0)
-        add_level_four(f"{prefix}{tool.lower()}-report{suffix}.html", f"Krona plots for {tool} taxonomies", output, pad, gap=23 if is_tool_last else 3)
-        add_spacer(output, num_lines=1 if is_tool_last else 2)
+                add_level_four(read_based_tables[f"{tool.lower()}_decontam_species"]["file"], read_based_tables[f"{tool.lower()}_decontam_species"]["def"], output, pad)
+        add_spacer(output, num_lines=3)
+        add_level_three("Krona_Reports/", "interactive hierarchical taxonomy plots", output, pad)
+        add_level_four(f"{prefix}{tool.lower()}-report{suffix}.html", f"Krona plots for {tool} taxonomies", output, pad, gap=3)
+        add_spacer(output, num_lines=2)
 
     add_level_two("Humann_Outputs -", "Humann functional profiling", output, pad)
     add_level_three("Gene_Families -", "Gene families", output, pad)
